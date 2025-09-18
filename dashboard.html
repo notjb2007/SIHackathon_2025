@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Public Health Admin Dashboard — SIH</title>
+  <style>
+    /* Simple modern styling — change colors as needed */
+    :root{
+      --bg:#0f1724; --card:#0b1220; --muted:#93a0b3; --accent:#06b6d4; --accent-2:#7c3aed;
+      --success:#16a34a; --danger:#ef4444; --glass: rgba(255,255,255,0.03);
+      --radius:12px; --shadow: 0 6px 18px rgba(2,6,23,0.6);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      color: #e6eef6;
+    }
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#071226 0%, #04111a 100%);-webkit-font-smoothing:antialiased;}
+    .app{display:flex;height:100vh;gap:18px;padding:18px;box-sizing:border-box}
+    /* Sidebar */
+    .sidebar{width:260px; background:linear-gradient(180deg,var(--card), rgba(8,14,25,0.6)); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); display:flex;flex-direction:column;gap:12px}
+    .brand{font-weight:700; font-size:18px; color:var(--accent-2); display:flex; align-items:center; gap:8px}
+    .nav{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+    .nav button{background:transparent;color:var(--muted);border:0;padding:10px;border-radius:10px;text-align:left;cursor:pointer}
+    .nav button.active{background:var(--glass);color:#fff}
+    .search{display:flex;gap:8px}
+    .search input{flex:1;padding:10px;border-radius:10px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)}
+    /* Main area */
+    .main{flex:1; display:flex; flex-direction:column; gap:18px}
+    .top-row{display:flex;gap:18px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:12px;padding:14px;box-shadow:var(--shadow)}
+    .users{flex:1;min-height:300px; overflow:auto}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th,td{padding:10px;border-bottom:1px dashed rgba(255,255,255,0.03); text-align:left}
+    th{color:var(--muted);font-size:12px}
+    tr:hover td{background:linear-gradient(90deg, rgba(255,255,255,0.01), transparent)}
+    .kpi{display:flex;gap:12px}
+    .kpi .item{flex:1;padding:12px;border-radius:10px;background:rgba(255,255,255,0.02)}
+    /* Right column: panels */
+    .right-col{width:420px;display:flex;flex-direction:column;gap:12px}
+    .chat{display:flex;flex-direction:column;height:380px}
+    .chat .history{flex:1;overflow:auto;padding:10px;border-radius:8px;background:#06111a;border:1px solid rgba(255,255,255,0.02)}
+    .msg{margin-bottom:8px}
+    .msg.admin{color:#d1f1ff}
+    .msg.user{color:#fff}
+    .controls{display:flex;gap:8px;margin-top:8px}
+    input,select,textarea,button{font:inherit}
+    textarea{width:100%;min-height:74px;padding:10px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)}
+    button.primary{background:linear-gradient(90deg,var(--accent),var(--accent-2));border:0;padding:10px 14px;border-radius:8px;color:#012;cursor:pointer}
+    .btn-ghost{background:transparent;border:1px solid rgba(255,255,255,0.04);padding:8px;border-radius:8px;color:var(--muted);cursor:pointer}
+    .alert-list{max-height:220px;overflow:auto;padding:6px;display:flex;flex-direction:column;gap:8px}
+    .alert-item{padding:8px;border-radius:8px;background:rgba(255,255,255,0.01);border-left:4px solid rgba(255,255,255,0.02)}
+    .small{font-size:12px;color:var(--muted)}
+    .controls .split{display:flex;gap:6px;flex:1}
+    .footer{font-size:12px;color:var(--muted);text-align:center;padding:6px}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,0.02);font-size:12px}
+    /* responsive */
+    @media (max-width:1000px){.app{flex-direction:column;padding:12px}.sidebar{width:100%;flex-direction:row;align-items:center;padding:12px}.right-col{width:100%;flex-direction:row;overflow:auto;height:260px}}
+  </style>
+</head>
+<body>
+  <div class="app" aria-live="polite">
+    <aside class="sidebar" role="navigation" aria-label="Admin navigation">
+      <div class="brand">🩺 PH-Admin • SIH</div>
+
+      <div class="search">
+        <input id="globalSearch" placeholder="Search by name, phone, location..." aria-label="Search users" />
+        <button id="anonymizeBtn" class="btn-ghost" title="Toggle anonymization">Anonymize: <span id="anonState">OFF</span></button>
+      </div>
+
+      <div class="nav" role="menu" aria-label="Sections">
+        <button id="navUsers" class="active">Users</button>
+        <button id="navAlerts">Alerts</button>
+        <button id="navChat">Chat</button>
+        <button id="navAdvanced">Advanced</button>
+      </div>
+
+      <div style="margin-top:auto">
+        <div class="small">Logged in as <strong>Admin</strong></div>
+        <div class="small" style="margin-top:6px">System status: <span class="pill" id="sysStatus">OK</span></div>
+      </div>
+    </aside>
+
+    <main class="main" role="main">
+      <div class="top-row">
+        <section class="card users" id="usersCard" aria-label="Users list">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div style="font-weight:700">Registered Users</div>
+            <div class="small">Total: <span id="totalUsers">0</span></div>
+          </div>
+
+          <div class="kpi" style="margin-bottom:10px">
+            <div class="item"><div class="small">Active Today</div><div id="kpiActive">0</div></div>
+            <div class="item"><div class="small">Alerts Sent</div><div id="kpiAlerts">0</div></div>
+            <div class="item"><div class="small">Escalations</div><div id="kpiEscalate">0</div></div>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-bottom:12px">
+            <select id="filterLocation"><option value="">All locations</option></select>
+            <select id="filterRisk">
+              <option value="">Risk level</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+            <button id="exportCsv" class="btn-ghost">Export CSV</button>
+          </div>
+
+          <table aria-label="Users table">
+            <thead>
+              <tr><th>Name</th><th>Phone</th><th>Location</th><th>Risk</th><th>Last Report</th></tr>
+            </thead>
+            <tbody id="usersTbody"></tbody>
+          </table>
+        </section>
+
+        <aside class="right-col" aria-label="Right column panels">
+          <div class="card chat" id="chatCard" aria-live="polite">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <div style="font-weight:700">Chatbot / SMS Console</div>
+              <div class="small">Selected: <span id="selectedUser">None</span></div>
+            </div>
+
+            <div class="history" id="chatHistory" role="log" aria-atomic="false"></div>
+
+            <div class="controls">
+              <select id="userSelect" aria-label="Select user to message"><option value="">-- choose user --</option></select>
+              <div class="split">
+                <textarea id="smsText" placeholder="Write message or template..." aria-label="SMS message"></textarea>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                  <button id="sendSmsBtn" class="primary">Send SMS</button>
+                  <button id="sendTemplateBtn" class="btn-ghost">Use template</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" id="alertsCard">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <div style="font-weight:700">Alerts</div>
+              <div><button id="newAlertBtn" class="primary">New Alert</button></div>
+            </div>
+
+            <div class="alert-list" id="alertList" aria-live="polite"></div>
+            <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+              <button id="clearAlerts" class="btn-ghost">Clear</button>
+              <div class="small" style="margin-left:auto">Last sync: <span id="lastSync">--</span></div>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <section class="card" id="detailsCard" aria-label="User details & advanced">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-weight:700">Selected User Details</div>
+          <div style="display:flex;gap:8px">
+            <button id="escalateBtn" class="btn-ghost">Escalate</button>
+            <button id="anonymizeExport" class="btn-ghost">Anonymize before export</button>
+          </div>
+        </div>
+
+        <div id="userDetails" class="small">No user selected. Click a user row to view details.</div>
+      </section>
+
+      <div class="footer">Admin Dashboard • <span id="buildInfo">v1.0 • SIH</span></div>
+    </main>
+  </div>
+
+  <!-- Modals / Templates (simple) -->
+  <div id="modalRoot" aria-hidden="true"></div>
+
+<script>
+/* -----------------------------
+   Mock data + utilities
+   Replace network stubs with your real backend endpoints:
+   - GET /api/users            -> list of users (JSON)
+   - POST /api/send-sms        -> { to, message } send SMS via gateway (Twilio/Gupshup/Meta)
+   - POST /api/create-alert    -> create alert in system
+   - GET /api/alerts           -> list alerts
+   ----------------------------- */
+
+const mockUsers = [
+  { id: "u1", name: "Ramesh Kumar", phone: "+919876543210", location: "Lucknow", risk: "low", lastReport: "2025-09-10", notes:"Diabetic" },
+  { id: "u2", name: "Sita Devi", phone: "+917894561230", location: "Patna", risk: "medium", lastReport: "2025-09-17", notes:"Fever 3 days" },
+  { id: "u3", name: "Asha R.", phone: "+918765432101", location: "Mumbai", risk: "high", lastReport: "2025-09-18", notes:"Breathlessness" },
+  { id: "u4", name: "Local Clinic (Aggregate)", phone: "", location: "Varanasi", risk: "low", lastReport: "2025-09-15", notes:"Cluster reported" }
+];
+
+let users = JSON.parse(localStorage.getItem('ph_users')) || mockUsers;
+let alerts = JSON.parse(localStorage.getItem('ph_alerts')) || [];
+let conversations = JSON.parse(localStorage.getItem('ph_convos')) || {};
+let anonymize = false;
+
+function saveState(){
+  localStorage.setItem('ph_users', JSON.stringify(users));
+  localStorage.setItem('ph_alerts', JSON.stringify(alerts));
+  localStorage.setItem('ph_convos', JSON.stringify(conversations));
+}
+
+/* -----------------------------
+   Rendering functions
+   ----------------------------- */
+
+function formatPhone(p){
+  if(!p) return "—";
+  if(anonymize) return p.replace(/\d(?=\d{2})/g, "*");
+  return p;
+}
+
+function renderUsers(filter=""){
+  const tbody = document.getElementById('usersTbody');
+  tbody.innerHTML = "";
+  const search = (document.getElementById('globalSearch').value || "").toLowerCase();
+  const locFilter = document.getElementById('filterLocation').value;
+  const riskFilter = document.getElementById('filterRisk').value;
+  const filtered = users.filter(u=>{
+    if(locFilter && u.location !== locFilter) return false;
+    if(riskFilter && u.risk !== riskFilter) return false;
+    if(search){
+      return (u.name + " " + u.phone + " " + u.location + " " + (u.notes||"")).toLowerCase().includes(search);
+    }
+    return true;
+  });
+  filtered.forEach(u=>{
+    const tr = document.createElement('tr');
+    tr.tabIndex = 0;
+    tr.style.cursor = 'pointer';
+    tr.innerHTML = `<td>${anonymize ? u.name.split(" ")[0] + " *" : u.name}</td>
+                    <td>${formatPhone(u.phone)}</td>
+                    <td>${u.location}</td>
+                    <td>${u.risk}</td>
+                    <td>${u.lastReport}</td>`;
+    tr.addEventListener('click', ()=>selectUser(u.id));
+    tbody.appendChild(tr);
+  });
+  document.getElementById('totalUsers').textContent = users.length;
+  // populate filters
+  const locSel = document.getElementById('filterLocation');
+  const locs = [...new Set(users.map(x=>x.location))];
+  locSel.innerHTML = '<option value="">All locations</option>' + locs.map(l=>`<option>${l}</option>`).join('');
+  // user select for chat
+  const userSelect = document.getElementById('userSelect');
+  userSelect.innerHTML = '<option value="">-- choose user --</option>' + users.map(u=>`<option value="${u.id}">${anonymize ? (u.name.split(" ")[0]+" *") : u.name} — ${u.location}</option>`).join('');
+}
+
+function renderAlerts(){
+  const el = document.getElementById('alertList');
+  el.innerHTML = "";
+  alerts.slice().reverse().forEach(a=>{
+    const d = document.createElement('div');
+    d.className = 'alert-item';
+    d.innerHTML = `<div style="display:flex;justify-content:space-between"><strong>${a.title}</strong><span class="small">${a.scope}</span></div>
+                   <div class="small">${a.message}</div>
+                   <div class="small" style="margin-top:6px">Created: ${new Date(a.created).toLocaleString()}</div>`;
+    el.appendChild(d);
+  });
+  document.getElementById('kpiAlerts').textContent = alerts.length;
+  document.getElementById('lastSync').textContent = alerts.length ? new Date(alerts[alerts.length-1].created).toLocaleString() : '--';
+}
+
+function renderChatHistory(userId){
+  const div = document.getElementById('chatHistory');
+  div.innerHTML = "";
+  const conv = conversations[userId] || [];
+  conv.forEach(m=>{
+    const p = document.createElement('div'); p.className='msg ' + (m.from==='admin' ? 'admin' : 'user');
+    p.innerHTML = `<div style="font-size:12px;color:var(--muted)">${m.from==='admin' ? 'Admin' : (anonymize? m.fromName.split(" ")[0]+" *": m.fromName)}</div><div>${m.text}</div><div class="small">${new Date(m.ts).toLocaleString()}</div>`;
+    div.appendChild(p);
+  });
+  div.scrollTop = div.scrollHeight;
+}
+
+/* -----------------------------
+   Actions (stubbed network calls)
+   Replace fetch URLs with your API endpoints.
+   ----------------------------- */
+
+async function sendSms(to, message){
+  // Example: your backend should forward to Twilio / Gupshup / WhatsApp gateway
+  // POST /api/send-sms { to, message }
+  // The code below simulates success and stores the chat locally.
+  if(!to) return {ok:false, error:"No phone number"};
+  // store in conversation
+  const user = users.find(u=>u.phone===to || u.id===to);
+  const id = user ? user.id : to;
+  const conv = conversations[id] || [];
+  conv.push({from:'admin', fromName:'Admin', text:message, ts: Date.now()});
+  conversations[id] = conv;
+  saveState();
+  renderChatHistory(id);
+  // simulate async request
+  return new Promise(res=>setTimeout(()=>res({ok:true, gatewayResponse:{status:"queued"}}), 500));
+}
+
+async function createAlert(title, message, scope){
+  const alert = { id: 'a'+Date.now(), title, message, scope, created: Date.now() };
+  alerts.push(alert);
+  saveState();
+  renderAlerts();
+  // simulate broadcasting: in a real system, POST to /api/create-alert and backend will push notifications / SMS / WhatsApp
+  return { ok:true, alert };
+}
+
+/* -----------------------------
+   Event wiring
+   ----------------------------- */
+
+document.getElementById('globalSearch').addEventListener('input', ()=>renderUsers());
+document.getElementById('filterLocation').addEventListener('change', ()=>renderUsers());
+document.getElementById('filterRisk').addEventListener('change', ()=>renderUsers());
+
+document.getElementById('navUsers').addEventListener('click', ()=>focusSection('users'));
+document.getElementById('navAlerts').addEventListener('click', ()=>focusSection('alerts'));
+document.getElementById('navChat').addEventListener('click', ()=>focusSection('chat'));
+document.getElementById('navAdvanced').addEventListener('click', ()=>focusSection('advanced'));
+
+document.getElementById('anonymizeBtn').addEventListener('click', ()=>{
+  anonymize = !anonymize;
+  document.getElementById('anonState').textContent = anonymize ? "ON" : "OFF";
+  renderUsers(); renderAlerts(); renderChatHistory(document.getElementById('userSelect').value);
+});
+
+document.getElementById('exportCsv').addEventListener('click', exportCsv);
+document.getElementById('newAlertBtn').addEventListener('click', showNewAlertModal);
+document.getElementById('clearAlerts').addEventListener('click', ()=>{ alerts=[]; saveState(); renderAlerts(); });
+
+document.getElementById('userSelect').addEventListener('change', (e)=>{
+  const id = e.target.value;
+  document.getElementById('selectedUser').textContent = id || "None";
+  renderChatHistory(id);
+  renderUserDetails(id);
+});
+
+document.getElementById('sendSmsBtn').addEventListener('click', async ()=>{
+  const id = document.getElementById('userSelect').value;
+  const txt = document.getElementById('smsText').value.trim();
+  if(!id || !txt){ alert('Select user and write a message'); return; }
+  const user = users.find(u=>u.id===id);
+  // Call sendSms (stub) with user.phone
+  const resp = await sendSms(user.phone, txt);
+  if(resp.ok) {
+    alert('Message queued');
+    document.getElementById('smsText').value = '';
+    // KPI: increment alerts count if this is an alert-style message
+    document.getElementById('kpiActive').textContent = parseInt(document.getElementById('kpiActive').textContent||0) + 1;
+  } else {
+    alert('Failed to send: ' + (resp.error || 'unknown'));
+  }
+});
+
+document.getElementById('sendTemplateBtn').addEventListener('click', ()=>{
+  const templates = [
+    "Please monitor your symptoms. If breathing difficulty occurs, seek immediate care.",
+    "Vaccination center open near you. Bring photo ID.",
+    "If you have fever > 38°C for 2 days, please visit your local clinic."
+  ];
+  const t = prompt("Choose template (1-3):\n1. Symptom monitor\n2. Vaccination notice\n3. Fever advice");
+  const idx = parseInt(t) - 1;
+  if(templates[idx]) document.getElementById('smsText').value = templates[idx];
+});
+
+/* user details and selection */
+function selectUser(id){
+  const user = users.find(u=>u.id===id);
+  if(!user) return;
+  // highlight selection: set userSelect and show
+  document.getElementById('userSelect').value = id;
+  document.getElementById('selectedUser').textContent = anonymize ? (user.name.split(" ")[0]+" *") : user.name;
+  renderChatHistory(id);
+  renderUserDetails(id);
+}
+
+function renderUserDetails(id){
+  const el = document.getElementById('userDetails');
+  if(!id){ el.innerHTML = "No user selected. Click a user row to view details."; return; }
+  const u = users.find(x=>x.id===id);
+  if(!u) return;
+  const phone = formatPhone(u.phone);
+  el.innerHTML = `<div style="display:flex;gap:12px;align-items:center">
+      <div style="flex:1">
+        <div><strong>${anonymize? u.name.split(" ")[0]+" *": u.name}</strong></div>
+        <div class="small">Phone: ${phone} • Location: ${u.location}</div>
+        <div class="small" style="margin-top:6px">Risk: <strong>${u.risk}</strong> • Last report: ${u.lastReport}</div>
+        <div style="margin-top:10px">${u.notes || ''}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="btn-ghost" onclick="openCall('${u.phone}')">Call</button>
+        <button class="btn-ghost" onclick="openMap('${u.location}')">Map</button>
+      </div>
+    </div>`;
+}
+
+/* -----------------------------
+   Modals & utilities
+   ----------------------------- */
+
+function exportCsv(){
+  // Export users (optionally anonymized)
+  const rows = users.map(u=>{
+    const phone = anonymize ? formatPhone(u.phone) : u.phone;
+    return { id:u.id, name: anonymize ? (u.name.split(" ")[0]+" *") : u.name, phone, location:u.location, risk:u.risk, lastReport:u.lastReport, notes:u.notes };
+  });
+  const csv = [Object.keys(rows[0]).join(",")].concat(rows.map(r=>Object.values(r).map(v=>`"${String(v||"")}"`).join(","))).join("\n");
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download = 'users_export.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* New Alert modal (simple prompt-based UI) */
+async function showNewAlertModal(){
+  const title = prompt("Alert title (short)");
+  if(!title) return;
+  const scope = prompt("Scope: global / location (type location name)","global");
+  const message = prompt("Message (text)");
+  if(!message) return;
+  const res = await createAlert(title,message,scope);
+  if(res.ok) {
+    // OPTIONAL: push SMS to all users in scope: call sendSms(user.phone, message) via backend
+    // For demo: we do NOT auto-send SMS to everyone; instead we record alert and show button to broadcast.
+    alert('Alert created. Use the "Broadcast" action in Advanced to send messages.');
+  } else {
+    alert('Failed to create alert');
+  }
+}
+
+/* Simulated 'call' and 'map' actions */
+function openCall(phone){
+  if(!phone){ alert('No phone available'); return; }
+  alert('This would trigger a call via backend telephony API to ' + phone + '. Replace with real integration.');
+}
+function openMap(loc){
+  alert('Open map for: ' + loc + '. Integrate with a mapping service (Google Maps) or internal geo-visualization.');
+}
+
+/* Sidebar section focus */
+function focusSection(name){
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
+  if(name==='users') document.getElementById('navUsers').classList.add('active');
+  if(name==='alerts') document.getElementById('navAlerts').classList.add('active');
+  if(name==='chat') document.getElementById('navChat').classList.add('active');
+  if(name==='advanced') document.getElementById('navAdvanced').classList.add('active');
+  // smooth focus behavior: scroll to section if small screen
+}
+
+/* Escalate action (forward to health worker) */
+document.getElementById('escalateBtn').addEventListener('click', ()=>{
+  const id = document.getElementById('userSelect').value;
+  if(!id) { alert('Select a user to escalate'); return; }
+  const u = users.find(x=>x.id===id);
+  // In production: POST /api/escalate { userId, reason }
+  alert('Escalation recorded for ' + u.name + '. Backend should notify nearest health worker.');
+  document.getElementById('kpiEscalate').textContent = parseInt(document.getElementById('kpiEscalate').textContent||0) + 1;
+});
+
+/* Quick simulated realtime alerts (demo) */
+setInterval(()=>{
+  // occasionally push demo alert from local clinic
+  if(Math.random() < 0.02){
+    createAlert('Cluster Alert','Multiple fever reports in area. Please check nearby clinics.','local');
+  }
+}, 3000);
+
+/* initialize UI */
+(function init(){
+  renderUsers();
+  renderAlerts();
+  document.getElementById('kpiActive').textContent = 0;
+  document.getElementById('kpiEscalate').textContent = 0;
+  // load existing convs
+  const first = users[0];
+  if(first) selectUser(first.id);
+})();
+</script>
+</body>
+</html>
